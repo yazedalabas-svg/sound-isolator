@@ -15,7 +15,10 @@ torchaudio==2.5.1
 # Render). ندع audio-separator[cpu] يختار نسخة onnxruntime المتوافقة معه.
 audio-separator[cpu]==0.44.5
 
-# ── محرّك Demucs v4 ومتطلباته ──
+# ── متطلبات Demucs v4 (بلا Demucs نفسه — يُثبَّت في Dockerfile بـ --no-deps) ──
+# demucs يتبع diffq رسميًا لدعم النماذج المكمَّمة (ميزة اختيارية لا نحتاجها)،
+# و diffq حزمة C تحتاج gcc — غير موجود في صورة python-slim وغير مُستحَق
+# لهذا الاستخدام. القائمة أدناه مطابقة تمامًا لما اختبرته محليًا وعمل.
 dora-search
 einops
 julius
@@ -28,7 +31,6 @@ treetable
 huggingface-hub
 safetensors
 sphn
-demucs @ git+https://github.com/adefossez/demucs.git
 
 # ── الواجهة والأدوات ──
 gradio>=4.44,<6

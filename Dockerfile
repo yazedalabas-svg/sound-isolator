@@ -11,7 +11,8 @@ WORKDIR /app
 # طبقة المتطلبات منفصلة عن الكود حتى يُعاد استخدام كاش pip بين عمليات النشر.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir --no-deps "git+https://github.com/adefossez/demucs.git"
 
 COPY app.py .
 COPY src/ src/
