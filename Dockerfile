@@ -1,9 +1,13 @@
 # SoundIsolator — صورة الاستضافة (Render وما شابه)، نسخة CPU فقط.
 FROM python:3.11-slim
 
-# ffmpeg لفكّ/ترميز الوسائط، git لتثبيت Demucs من مستودعه مباشرة.
+# ffmpeg لفكّ/ترميز الوسائط، git لتثبيت Demucs من مستودعه مباشرة،
+# build-essential (gcc) لأن audio-separator يفرض diffq العادية على أي
+# نظام غير ويندوز (raw diffq>=0.2; sys_platform != "win32") — وهذه
+# لا تملك عجلة جاهزة لبايثون 3.11 على لينكس فتُبنى من المصدر. رؤوس
+# بايثون نفسها موجودة مسبقًا في هذه الصورة، الناقص كان المترجم فقط.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg git \
+ && apt-get install -y --no-install-recommends ffmpeg git build-essential \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
