@@ -282,12 +282,25 @@ def autopick_model(duration_s: float, budget_s: float = AUTO_TIME_BUDGET_S) -> t
         fits = [m for m in fits if m.vram_gb <= mem - 0.4]                # هامش أمان
     fits.sort(key=lambda m: m.sdr, reverse=True)
 
+    # قيم rt_cpu تقديرية بلا أي قياس فعلي (لا كرت GPU لدينا للمقارنة محليًا).
+    # قِيست لاحقًا على Render فعليًا: نموذج قُدِّر له ~3 دقائق (rt_cpu=8) وصل
+    # 486 ثانية وهو عند 25% فقط — أي ~32 دقيقة حقيقية، أبطأ بـ13× من التقدير.
+    # المعالجات المُستضافة غالبًا حصّة صغيرة من نواة مشتركة، لا نواة كاملة.
+    # بلا بيانات موثوقة لأي نموذج، الاختيار الآمن الوحيد هو الأسرع دائمًا —
+    # نتجاوز حلقة الميزانية كليًا على المعالج بدل الوثوق بأرقام مضلِّلة.
+    if dev == "cpu":
+        fastest = min(fits, key=lambda m: m.rt_cpu)
+        secs = estimate_seconds(fastest.key, duration_s, dev)
+        return fastest.key, (f"معالجة على المعالج (لا كرت شاشة هنا) — أبطأ بكثير من "
+                             f"المتوقّع أحيانًا، فاخترت الأسرع. تقدير {_fmt_duration(secs)} "
+                             f"غير مضمون؛ قد يطول أكثر")
+
     for m in fits:
         secs = estimate_seconds(m.key, duration_s, dev)
         if secs <= budget_s:
             return m.key, f"أعلى دقة متاحة تنتهي خلال {_fmt_duration(secs)} على جهازك"
 
-    fastest = min(fits, key=lambda m: m.rt_cuda if dev == "cuda" else m.rt_cpu)
+    fastest = min(fits, key=lambda m: m.rt_cuda)
     secs = estimate_seconds(fastest.key, duration_s, dev)
     return fastest.key, f"الملف طويل — اخترت الأسرع لينتهي خلال {_fmt_duration(secs)}"
 

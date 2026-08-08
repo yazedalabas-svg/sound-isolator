@@ -512,13 +512,14 @@ def run(path, mode, progress=gr.Progress()):
                       f'({names}) — تنزيلها بالأسفل.</span>')
 
     status = (f'<div class="card">تم العزل في {res.seconds/60:.1f} دقيقة — '
-              f'حرّك المنزلقات أثناء التشغيل، ثم احفظ المزيج.<br>'
+              f'نزّل الغناء والموسيقى مباشرة، أو حرّك المنزلقات لتصنع مزيجك الخاص.<br>'
               f'<span class="muted">{res.output_dir}</span>{extra_note}</div>')
     # الحالة تُمرَّر عبر State لا مباشرةً: Gradio يرسم شريط تقدّم فوق كل مخرج
     # مرئي، فتوجيهها هنا كان يُظهر شريطين متطابقين ويبدو كأن الواجهة معطوبة.
     return (mixer_html(vocals, music), gr.update(visible=True), vocals, music,
             status, gr.update(visible=False),
-            gr.update(value=extra_files, visible=bool(extra_files)))
+            gr.update(value=extra_files, visible=bool(extra_files)),
+            gr.update(value=[vocals, music], visible=True))
 
 
 def save_mix(vocals, music, gain_v, gain_m):
@@ -602,12 +603,17 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
         with gr.Column(scale=1):
             status = gr.HTML()
             mixer = gr.HTML(EMPTY_MIXER)
+            # تنزيل فوري بمجرد انتهاء العزل — بلا أي خطوة إضافية، مثل أي
+            # موقع تنزيل عادي. الملفات على خادم الاستضافة لا على جهازك؛
+            # هذا الزر هو ما ينقلها إلى جهازك فعليًا عبر المتصفّح.
+            raw_dl = gr.File(label="⬇️ تنزيل الغناء والموسيقى", file_count="multiple",
+                             visible=False)
             with gr.Row(visible=False) as actions:
-                save_btn = gr.Button("احفظ المزيج على جهازي", variant="primary")
+                save_btn = gr.Button("اضبط المزيج ثم احفظه", variant="primary")
                 folder_btn = gr.Button("افتح مجلد النتائج", variant="secondary",
                                        visible=IS_DESKTOP)
-            dl = gr.File(label="تنزيل المزيج", visible=False)
-            extra_dl = gr.File(label="آلات منفردة (عند توفّرها)", file_count="multiple",
+            dl = gr.File(label="⬇️ تنزيل المزيج المخصّص", visible=False)
+            extra_dl = gr.File(label="⬇️ آلات منفردة (عند توفّرها)", file_count="multiple",
                                visible=False)
 
     gr.HTML("<p style='text-align:center;opacity:.45;font-size:.8rem;margin-top:16px'>"
@@ -622,7 +628,8 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
     st_status = gr.State("")
 
     go.click(lambda: gr.update(interactive=False), None, go).then(
-        run, [src, mode], [mixer, actions, st_vocals, st_music, st_status, dl, extra_dl]).then(
+        run, [src, mode],
+        [mixer, actions, st_vocals, st_music, st_status, dl, extra_dl, raw_dl]).then(
         lambda s: s, st_status, status).then(
         None, None, None, js="() => window.__mixInit && window.__mixInit()").then(
         lambda: gr.update(interactive=True), None, go)
