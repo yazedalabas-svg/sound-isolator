@@ -9,8 +9,11 @@ torchvision==0.20.1
 torchaudio==2.5.1
 
 # ── محرّك UVR / MDX / Roformer ──
+# لا نُثبّت onnxruntime هنا: التثبيت المحلي يُقيّده على 1.20.2 خصيصًا
+# للتوافق مع onnxruntime-gpu وCUDA 12.4 — قيد لا معنى له هنا (لا GPU،
+# وأصلًا onnxruntime==1.20.2 غير منشور لحزمة CPU، هذا ما فجّر بناء
+# Render). ندع audio-separator[cpu] يختار نسخة onnxruntime المتوافقة معه.
 audio-separator[cpu]==0.44.5
-onnxruntime==1.20.2
 
 # ── محرّك Demucs v4 ومتطلباته ──
 dora-search
