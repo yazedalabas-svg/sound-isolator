@@ -20,8 +20,8 @@ import gradio as gr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from engine import (ROOT, Settings, autopick_model, estimate_seconds,  # noqa: E402
-                    mix_stems, probe, resolve_device, separate_file, vram_gb)
+from engine import (ROOT, Settings, mix_stems, pick_for_mode, probe,  # noqa: E402
+                    resolve_device, separate_file, vram_gb)
 from models import BY_KEY  # noqa: E402
 
 OUTPUTS = ROOT / "outputs"
@@ -90,6 +90,25 @@ footer {display: none !important;}
 .card {background: var(--surface); border: 1px solid var(--border);
        border-radius: var(--r); padding: 16px 18px; color: var(--fg);}
 .card .muted {color: var(--fg-dim); font-size: .87rem;}
+
+/* ── اختيار الوضع (سريع/دقيق) ── */
+/* Gradio يضع dir="ltr" داخليًا على Radio بصرف النظر عن اتجاه الحاوية —
+   نفرض RTL صراحةً وإلا انقلب ترتيب دائرة الاختيار عن النص العربي. */
+#mode, #mode * {direction: rtl !important;}
+#mode {background: transparent !important; border: none !important; padding: 0 !important;}
+/* كل خيار قابل للنقر هو <label><input><span>نص</span></label> — القاعدة
+   السابقة هنا كانت تطابق هذا الشكل بالضبط فتُخفي الخيارين كليهما بدل
+   إخفاء عنوان مكرَّر (كان الظن أنه داخل label، وهو ليس كذلك). حُذفت. */
+#mode .wrap {display: flex !important; gap: 8px; flex-wrap: wrap;}
+#mode label.selected, #mode label:has(input:checked) {
+  border-color: var(--accent) !important; background: rgba(249,115,22,.1) !important;}
+#mode > .wrap > label {
+  flex: 1; min-width: 200px; min-height: 44px; padding: 12px 14px !important;
+  border-radius: 11px !important; border: 1px solid var(--border) !important;
+  background: var(--surface) !important; color: var(--fg) !important;
+  cursor: pointer; transition: all .18s ease; font-size: .88rem !important;}
+#mode > .wrap > label:hover {border-color: var(--fg-dim) !important;}
+#mode input[type=radio] {accent-color: var(--accent);}
 
 /* ── الزر الرئيسي ── */
 #go {font-size: 1.1rem !important; font-weight: 700 !important; padding: 16px !important;
@@ -421,34 +440,53 @@ def _hardware_line() -> str:
 
 
 def analyze(path):
+    """يقرأ الملف ويعرض معلوماته — بلا اختيار نموذج بعد؛ ذلك يعتمد على الوضع المختار."""
     if not path:
-        return "", gr.update(interactive=False), None
+        return "", gr.update(interactive=False), 0.0
     try:
         info = probe(path)
     except Exception as exc:
         return (f'<div class="card">تعذّر قراءة الملف — {exc}</div>',
-                gr.update(interactive=False), None)
+                gr.update(interactive=False), 0.0)
 
-    key, why = autopick_model(info["duration"])
-    mins = estimate_seconds(key, info["duration"]) / 60
-    when = "أقل من دقيقة" if mins < 1 else f"حوالي {mins:.0f} دقيقة"
     mm, ss = divmod(int(info["duration"]), 60)
     kind = "فيديو" if info["has_video"] else "صوت"
-
     md = (f'<div class="card"><b>{Path(path).name}</b><br>'
-          f'<span class="muted">{kind} · {mm}:{ss:02d} · {info["sample_rate"]} Hz</span>'
-          f'<br><br>الوقت المتوقّع: <b>{when}</b><br>'
-          f'<span class="muted">التقنية: {BY_KEY[key].model_id} — {why}</span></div>')
-    return md, gr.update(interactive=True), key
+          f'<span class="muted">{kind} · {mm}:{ss:02d} · {info["sample_rate"]} Hz</span></div>')
+    return md, gr.update(interactive=True), info["duration"]
 
 
-def run(path, model_key, progress=gr.Progress()):
+def mode_estimate(duration_s: float, mode: str) -> str:
+    """يعرض الوقت المتوقّع للوضع المختار — يتحدّث فور تبديل الاختيار، قبل الضغط."""
+    if not duration_s:
+        return ""
+    key, why = pick_for_mode(duration_s, mode)
+    return f'<div class="card"><span class="muted">التقنية: {BY_KEY[key].model_id}</span><br>{why}</div>'
+
+
+INSTRUMENT_LABELS = {
+    "drums": "الطبول", "bass": "الباص", "guitar": "الجيتار",
+    "piano": "البيانو", "other": "أخرى (آلات متبقّية)",
+}
+
+
+def run(path, mode, progress=gr.Progress()):
     if not path:
         raise gr.Error("أفلت ملفًا أولًا.")
-    if not model_key:
-        model_key, _ = autopick_model(probe(path)["duration"])
+    duration = probe(path)["duration"]
+    model_key, _ = pick_for_mode(duration, mode)
 
-    settings = Settings(model=model_key, stem_mode="both", output_format="wav24",
+    # "all" بدل "both": عند اختيار نموذج Demucs يفصل كل آلة على حدة
+    # (طبول/باص/جيتار/بيانو)، "both" كانت تتجاهل هذا الفصل الدقيق وتستبدله
+    # بمزيج واحد. الآن تصل الأجزاء الفردية كاملة، بالإضافة إلى موسيقى مُجمَّعة
+    # للمشغّل. مع نماذج الغناء/الموسيقى الثنائية (Roformer وغيرها) لا فرق —
+    # هي أصلًا لا تنتج غير الاثنين.
+    #
+    # residual_instrumental=True (الطرح الطوري) للموسيقى المُجمَّعة تحديدًا:
+    # قِسته فعليًا مقابل جمع أجزاء Demucs النظيفة على العيّنة المرجعية —
+    # الطرح أفضل بفارق طفيف (21.34dB مقابل 21.09dB)، لأنه يلتقط ما لا
+    # تفصله أقنعة الآلات بدقة (كالصدى والتفاعلات الدقيقة بين الآلات).
+    settings = Settings(model=model_key, stem_mode="all", output_format="wav24",
                         sample_rate=44100, device="auto", residual_instrumental=True)
 
     def cb(frac, msg):
@@ -463,13 +501,24 @@ def run(path, model_key, progress=gr.Progress()):
     if not (vocals and music):
         raise gr.Error("لم يُنتج النموذج المسارين المطلوبين.")
 
+    # آلات منفردة أنتجها Demucs إضافةً إلى الموسيقى المُجمَّعة (متاحة فقط حين
+    # يقع الاختيار التلقائي على نموذج Demucs — عادة للمقاطع القصيرة).
+    extra = {k: v for k, v in res.files.items() if k in INSTRUMENT_LABELS}
+    extra_files = list(extra.values())
+    extra_note = ""
+    if extra:
+        names = "، ".join(INSTRUMENT_LABELS[k] for k in extra)
+        extra_note = (f'<br><span class="muted">النموذج فصل كل آلة على حدة أيضًا '
+                      f'({names}) — تنزيلها بالأسفل.</span>')
+
     status = (f'<div class="card">تم العزل في {res.seconds/60:.1f} دقيقة — '
               f'حرّك المنزلقات أثناء التشغيل، ثم احفظ المزيج.<br>'
-              f'<span class="muted">{res.output_dir}</span></div>')
+              f'<span class="muted">{res.output_dir}</span>{extra_note}</div>')
     # الحالة تُمرَّر عبر State لا مباشرةً: Gradio يرسم شريط تقدّم فوق كل مخرج
     # مرئي، فتوجيهها هنا كان يُظهر شريطين متطابقين ويبدو كأن الواجهة معطوبة.
     return (mixer_html(vocals, music), gr.update(visible=True), vocals, music,
-            status, gr.update(visible=False))
+            status, gr.update(visible=False),
+            gr.update(value=extra_files, visible=bool(extra_files)))
 
 
 def save_mix(vocals, music, gain_v, gain_m):
@@ -530,7 +579,7 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
       <div class="chip"><span class="dot"></span>{_hardware_line()}</div>
     </div>""")
 
-    picked = gr.State()
+    st_duration = gr.State(0.0)
     st_vocals = gr.Textbox(visible=False)
     st_music = gr.Textbox(visible=False)
     n_gv = gr.Number(value=1.0, visible=False)
@@ -542,6 +591,11 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
             src = gr.File(label="أفلت الملف هنا  (MP3 · WAV · FLAC · M4A · MP4 · MOV · MKV)",
                           type="filepath", elem_id="drop")
             info = gr.Markdown()
+            mode = gr.Radio(
+                [("متوازن — أسرع، نتيجة جيدة", "speed"),
+                 ("جودة عالية — أبطأ، أدقّ فصل ممكن", "quality")],
+                value="speed", label="التقنية", elem_id="mode")
+            estimate = gr.HTML()
             go = gr.Button("ابدأ العزل", variant="primary", elem_id="go", interactive=False)
             sample = gr.Button("جرّبه على عيّنة جاهزة", size="sm", variant="secondary")
 
@@ -553,18 +607,22 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
                 folder_btn = gr.Button("افتح مجلد النتائج", variant="secondary",
                                        visible=IS_DESKTOP)
             dl = gr.File(label="تنزيل المزيج", visible=False)
+            extra_dl = gr.File(label="آلات منفردة (عند توفّرها)", file_count="multiple",
+                               visible=False)
 
     gr.HTML("<p style='text-align:center;opacity:.45;font-size:.8rem;margin-top:16px'>"
             "للتحكم الكامل في النموذج والصيغة والدقة شغّل <code>run-advanced.bat</code></p>")
 
     # ── الربط ──
-    src.change(analyze, src, [info, go, picked])
+    src.change(analyze, src, [info, go, st_duration]).then(
+        mode_estimate, [st_duration, mode], estimate)
+    mode.change(mode_estimate, [st_duration, mode], estimate)
     sample.click(make_sample, None, src)
 
     st_status = gr.State("")
 
     go.click(lambda: gr.update(interactive=False), None, go).then(
-        run, [src, picked], [mixer, actions, st_vocals, st_music, st_status, dl]).then(
+        run, [src, mode], [mixer, actions, st_vocals, st_music, st_status, dl, extra_dl]).then(
         lambda s: s, st_status, status).then(
         None, None, None, js="() => window.__mixInit && window.__mixInit()").then(
         lambda: gr.update(interactive=True), None, go)

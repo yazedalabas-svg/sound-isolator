@@ -254,6 +254,16 @@ def estimate_seconds(model_key: str, duration_s: float, device: str | None = Non
     return duration_s * factor + 6.0          # + زمن تحميل النموذج وفك الترميز
 
 
+def _fmt_duration(seconds: float) -> str:
+    """
+    ~{mins:.0f} دقيقة كانت تعرض «~0 دقيقة» لأي تقدير دون 90 ثانية (0.5
+    دقيقة تُقرَّب لأقرب زوجي = صفر) — مربك وغير صحيح. نعرض ثوانٍ تحت الدقيقة.
+    """
+    if seconds < 60:
+        return f"~{max(round(seconds), 5)} ثانية"
+    return f"~{seconds / 60:.0f} دقيقة"
+
+
 def autopick_model(duration_s: float, budget_s: float = AUTO_TIME_BUDGET_S) -> tuple[str, str]:
     """
     يختار أفضل نموذج **يليق بعتاد هذا الجهاز**، ويعيد (المفتاح، سبب الاختيار).
@@ -273,13 +283,33 @@ def autopick_model(duration_s: float, budget_s: float = AUTO_TIME_BUDGET_S) -> t
     fits.sort(key=lambda m: m.sdr, reverse=True)
 
     for m in fits:
-        if estimate_seconds(m.key, duration_s, dev) <= budget_s:
-            mins = estimate_seconds(m.key, duration_s, dev) / 60
-            return m.key, f"أعلى دقة متاحة تنتهي خلال ~{mins:.0f} دقيقة على جهازك"
+        secs = estimate_seconds(m.key, duration_s, dev)
+        if secs <= budget_s:
+            return m.key, f"أعلى دقة متاحة تنتهي خلال {_fmt_duration(secs)} على جهازك"
 
     fastest = min(fits, key=lambda m: m.rt_cuda if dev == "cuda" else m.rt_cpu)
-    mins = estimate_seconds(fastest.key, duration_s, dev) / 60
-    return fastest.key, f"الملف طويل — اخترت الأسرع لينتهي خلال ~{mins:.0f} دقيقة"
+    secs = estimate_seconds(fastest.key, duration_s, dev)
+    return fastest.key, f"الملف طويل — اخترت الأسرع لينتهي خلال {_fmt_duration(secs)}"
+
+
+# ميزانية وضع «الجودة العالية». قِسْت أن roformer_v1 (أعلى SDR) يحتاج
+# ~18× طول الملف — أغنية ٤ دقائق ≈ ٧٢ دقيقة معالجة، وهذا يخالف «ما تطول
+# مرّة» مهما بلغت الدقة. فبدل تثبيت نموذج واحد، نطبّق نفس منطق autopick
+# بسقف أعلى معقول: أفضل دقة تُنجَز خلال ٣ دقائق — على مقاطع قصيرة جدًا فقط
+# يحصل المستخدم على roformer_v1 نفسه (يفي بالسقف الضيق)، وأغلب الملفات
+# تنزلق تلقائيًا لنموذج أسرع بوضوح (mdxnet_inst_hq3/kim_vocal_2 عادة) —
+# لا يزال أدقّ من وضع السرعة، لكن الوقت مضمون ألا يتجاوز ٣ دقائق أبدًا.
+QUALITY_TIME_BUDGET_S = 180.0
+
+
+def pick_for_mode(duration_s: float, mode: str) -> tuple[str, str]:
+    """
+    اختيار صريح بين وضعين يراهما المستخدم بوضوح قبل أن يضغط:
+      speed   → ميزانية AUTO_TIME_BUDGET_S (٣٠ث) — أسرع نموذج يليق بالوقت
+      quality → ميزانية QUALITY_TIME_BUDGET_S (٣د) — أعلى دقة ضمن حدّ معقول
+    """
+    budget = QUALITY_TIME_BUDGET_S if mode == "quality" else AUTO_TIME_BUDGET_S
+    return autopick_model(duration_s, budget_s=budget)
 
 
 def gpu_info() -> str:
