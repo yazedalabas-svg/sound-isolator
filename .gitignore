@@ -1,0 +1,7 @@
+.venv/
+cache/
+outputs/
+models/
+demo/*.wav
+__pycache__/
+*.pyc

@@ -1,0 +1,20 @@
+# تهيئة Render التلقائية (Blueprint). عند ربط المستودع، يكتشف Render
+# هذا الملف ويقترح الخدمة جاهزة بلا إعداد يدوي.
+#
+# ملاحظة صادقة: الخطة "starter" (المجانية سابقًا/الأرخص) عادة 512MB
+# رام — قد لا تكفي لتحميل PyTorch + نموذج فصل صوت معًا. إن فشل التشغيل
+# بخطأ نفاد ذاكرة، ارفع الخطة إلى "standard" (2GB+) من لوحة Render.
+services:
+  - type: web
+    name: sound-isolator
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: GRADIO_ANALYTICS_ENABLED
+        value: "False"
+    disk:
+      name: model-cache
+      mountPath: /app/cache
+      sizeGB: 5

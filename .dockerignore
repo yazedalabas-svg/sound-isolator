@@ -1,0 +1,14 @@
+.venv/
+cache/
+outputs/
+models/
+demo/*.wav
+__pycache__/
+*.pyc
+.git/
+.gitignore
+*.md
+install.ps1
+run.bat
+run-advanced.bat
+run-cli.bat

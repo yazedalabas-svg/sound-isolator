@@ -1,0 +1,33 @@
+# متطلبات الاستضافة السحابية (Render وما شابه) — نسخة CPU فقط.
+#
+# محليًا استخدم install.ps1 بدلًا من هذا الملف — هو يثبّت PyTorch بدعم
+# CUDA لكرت شاشتك. هذا الملف مخصّص لخادم بلا GPU.
+
+# ── PyTorch (عجلات CPU القياسية من PyPI؛ لا حاجة لفهرس CUDA هنا) ──
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+
+# ── محرّك UVR / MDX / Roformer ──
+audio-separator[cpu]==0.44.5
+onnxruntime==1.20.2
+
+# ── محرّك Demucs v4 ومتطلباته ──
+dora-search
+einops
+julius
+lameenc
+openunmix
+pyyaml
+tqdm
+submitit
+treetable
+huggingface-hub
+safetensors
+sphn
+demucs @ git+https://github.com/adefossez/demucs.git
+
+# ── الواجهة والأدوات ──
+gradio>=4.44,<6
+soundfile
+numpy
