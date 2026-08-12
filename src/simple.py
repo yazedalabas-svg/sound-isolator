@@ -616,8 +616,13 @@ with gr.Blocks(title="عازل الصوت", css=CSS, head=HEAD,
             extra_dl = gr.File(label="⬇️ آلات منفردة (عند توفّرها)", file_count="multiple",
                                visible=False)
 
+    # Render يضبط RENDER_GIT_COMMIT تلقائيًا لكل نشرة — نعرض أول 7 خانات في
+    # التذييل، هامش تشخيصي رخيص للتأكّد أي كوميت منشور فعليًا بلا تخمين.
+    _build_tag = os.environ.get("RENDER_GIT_COMMIT", "")[:7]
+    _build_line = f" · build {_build_tag}" if _build_tag else ""
     gr.HTML("<p style='text-align:center;opacity:.45;font-size:.8rem;margin-top:16px'>"
-            "للتحكم الكامل في النموذج والصيغة والدقة شغّل <code>run-advanced.bat</code></p>")
+            "للتحكم الكامل في النموذج والصيغة والدقة شغّل <code>run-advanced.bat</code>"
+            f"{_build_line}</p>")
 
     # ── الربط ──
     src.change(analyze, src, [info, go, st_duration]).then(
