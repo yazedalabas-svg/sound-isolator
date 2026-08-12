@@ -22,6 +22,18 @@ COPY app.py .
 COPY src/ src/
 COPY demo/ demo/
 
+# نموذج الاستضافة الافتراضي (Kim_Vocal_2.onnx) يُنزَّل هنا وقت البناء بدل
+# وقت أول طلب حقيقي. لاحظنا تعليقًا فعليًا على Render — أكثر من 150 ثانية
+# بلا أي تقدّم أثناء تنزيله وقت التشغيل (على الأغلب اتصال الحاوية الحيّة
+# بالإنترنت أبطأ/أقل ثباتًا من بيئة البناء). الحجم صغير (~64MB) فتضمينه في
+# الصورة لا يُثقلها كثيرًا، ويُزيل هذا الاعتماد الشبكي الهش وقت التشغيل كليًا.
+RUN python -c "\
+import sys, logging; sys.path.insert(0, 'src'); \
+from audio_separator.separator import Separator; \
+s = Separator(model_file_dir='models', output_dir='/tmp', log_level=logging.WARNING); \
+s.load_model(model_filename='Kim_Vocal_2.onnx'); \
+print('pre-cached Kim_Vocal_2.onnx OK')"
+
 # كل الكاشات داخل /app حتى لا تكتب خارج الحاوية.
 ENV GRADIO_ANALYTICS_ENABLED=False \
     PYTHONUNBUFFERED=1 \
